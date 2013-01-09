@@ -5,283 +5,19 @@
  */
 
 (function() {
-	HN.Grass = function() {
-		return this;
-	};
-
-	HN.Grass.prototype= {
-
-		alto_hierba:			0,		// grass height
-		maxAngle:				0,		// maximum grass rotation angle (wind movement)
-		angle:					0,		// construction angle. thus, every grass is different to others
-		coords:					null,	// quadric bezier curves coordinates
-		color:					null,	// grass color. modified by ambient component.
-		offset_control_point: 	3,		// grass base size. greater values, wider at the basement.
-
-        curve:                  null,   // gl curve.
-
-		initialize : function(canvasWidth, canvasHeight, minHeight, maxHeight, angleMax, initialMaxAngle)	{
-
-	        // grass start position
-			var sx= Math.floor( Math.random()*canvasWidth );
-			var sy= canvasHeight;
-
-	        var offset_control_x=2;
-
-
-			this.alto_hierba= minHeight+Math.random()*maxHeight;
-			this.maxAngle= 10+Math.random()*angleMax;
-			this.angle= Math.random()*initialMaxAngle*(Math.random()<.5?1:-1)*Math.PI/180;
-
-			// hand crafted value. modify offset_control_x to play with grass curvature slope.
-	        var csx= sx-offset_control_x ;
-
-	        // curvatura de la hierba. - menor, curva mas tiesa. +valor, hierba lacia.
-	        // grass curvature. greater values make grass bender.
-	        var csy= sy-this.alto_hierba/2;
-
-	        var psx= csx;
-	        var psy= csy;
-
-	        // the bigger offset_control_point, the wider on its basement.
-	        this.offset_control_point=10;
-	        var dx= sx+this.offset_control_point;
-	        var dy= sy;
-
-	        this.coords= [sx,sy,csx,csy,psx,psy,dx,dy];
-
-	        // grass color.
-	        this.color= [16+Math.floor(Math.random()*32),
-	                     100+Math.floor(Math.random()*155),
-	                     16+Math.floor(Math.random()*32) ];
-
-		},
-
-		/**
-		 * paint every grass.
-		 * @param ctx is the canvas2drendering context
-		 * @param time for grass animation.
-		 * @param ambient parameter to dim or brighten every grass.
-		 * @returns nothing
-		 */
-		paint : function(ctx,time,ambient) {
-
-//	        ctx.save();
-
-	        // grass peak position. how much to rotate the peak.
-	        // less values (ie the .0005), will make as if there were a softer wind.
-	        var inc_punta_hierba= Math.sin(time*.0005);
-
-	        // rotate the point, so grass curves are modified accordingly. If just moved horizontally, the curbe would
-	        // end by being unstable with undesired visuals.
-	        var ang= this.angle + Math.PI/2 + inc_punta_hierba * Math.PI/180*(this.maxAngle*Math.cos(time*.0002));
-	        var px= this.coords[0]+ this.offset_control_point + this.alto_hierba*Math.cos(ang);
-	        var py= this.coords[1]   			  			 - this.alto_hierba*Math.sin(ang);
-
-	        ctx.beginPath();
-	        ctx.moveTo( this.coords[0], this.coords[1] );
-	        ctx.bezierCurveTo(this.coords[0], this.coords[1], this.coords[2], this.coords[3], px, py);
-
-	        ctx.bezierCurveTo(px, py, this.coords[4], this.coords[5],  this.coords[6], this.coords[7]);
-	        ctx.closePath();
-	        ctx.fillStyle='rgb('+
-	        		Math.floor(this.color[0]*ambient)+','+
-	        		Math.floor(this.color[1]*ambient)+','+
-	        		Math.floor(this.color[2]*ambient)+')';
-	        ctx.fill();
-
-		},
-        paintActorGL : function(director, time, ambient, wmv) {
-            if ( null==this.curve ) {
-                this.curve= new CAAT.Bezier();
-                this.__polyLine= new Float32Array( 11*2*3 );
-            }
-
-            var inc_punta_hierba= Math.sin(time*.0005);
-
-            // rotate the point, so grass curves are modified accordingly. If just moved horizontally, the curbe would
-            // end by being unstable with undesired visuals.
-            var ang= this.angle + Math.PI/2 + inc_punta_hierba * Math.PI/180*(this.maxAngle*Math.cos(time*.0002));
-            var px= this.coords[0]+ this.offset_control_point + this.alto_hierba*Math.cos(ang);
-            var py= this.coords[1]   			  			 - this.alto_hierba*Math.sin(ang);
-
-            var contour= this.curve.setQuadric(
-                    this.coords[0],
-                    this.coords[1],
-                    this.coords[2],
-                    this.coords[3],
-                    px,
-                    py ).getContour(10);
-
-            var contour2= this.curve.setQuadric(
-                    px,
-                    py,
-                    this.coords[4],
-                    this.coords[5],
-                    this.coords[6],
-                    this.coords[7] ).getContour(10);
-
-            contour= contour.concat(contour2);
-
-            var pos=0;
-            var z= -director.height/2;
-
-            for( var i=0; i<contour.length; i++ ) {
-
-                wmv.transformCoord(contour[i]);
-
-                this.__polyLine[pos++]= contour[i].x;
-                this.__polyLine[pos++]= contour[i].y;
-                this.__polyLine[pos++]= z;
-            }
-
-            director.glTextureProgram.drawPolylines( this.__polyLine, contour.length,
-                    Math.floor(this.color[0]*ambient)/255,
-	        		Math.floor(this.color[1]*ambient)/255,
-	        		Math.floor(this.color[2]*ambient)/255,
-                    1,
-                    3);
-        }
-	};
-})();
-
-(function() {
 	HN.Garden= function() {
         HN.Garden.superclass.constructor.call(this);
-//        this.glEnabled= true;
 		return this;
 	};
 
 
     HN.Garden.prototype= {
-		grass:			null,
 		ambient:		1,
-		stars:			null,
-		firefly_radius:	10,
-		num_fireflyes:	40,
-		num_stars:		512,
-        fireflyColor:   [ '#ffff00', '#7fff00', '#c0c000' ],
-        backgroundEnabled: false,
 
 		initialize : function(ctx,size,maxGrassHeight)	{
-			this.grass= [];
-
-			for(var i=0; i<size; i++ ) {
-				var g= new HN.Grass();
-				g.initialize(
-						this.width,
-						this.height,
-						50,			// min grass height
-						maxGrassHeight, // max grass height
-						20, 		// grass max initial random angle
-						40			// max random angle for animation
-						);
-				this.grass.push(g);
-			}
-
-			this.stars= [];
-			for( i=0; i<this.num_stars; i++ )	{
-				this.stars.push( Math.floor( Math.random()*(this.width-10)+5  ) );
-				this.stars.push( Math.floor( Math.random()*(this.height-10)+5 ) );
-			}
-
-            if ( this.backgroundEnabled ) {
-                this.lerp(ctx,0,2000);
-            }
-
             return this;
-		},/*
-        paintActorGL : function(director,time) {
-            director.glFlush();
-
-            for( var i=0; i<this.grass.length; i++ ) {
-                this.grass[i].paintActorGL(director,time,this.ambient,this.worldModelViewMatrix);
-            }
-        },*/
+		},
 		paint : function(director, time){
-			var ctx= director.ctx;
-            var i,j;
-
-            if ( this.backgroundEnabled ) {
-                ctx.fillStyle= this.gradient;
-                ctx.fillRect(0,0,this.width,this.height);
-
-                // draw stars if ambient below .3 -> night
-                if ( this.ambient<.3 )	{
-
-                    // modify stars translucency by ambient (as transitioning to day, make them dissapear).
-                    ctx.globalAlpha= 1-((this.ambient-.05)/.25);
-
-                    // as well as making them dimmer
-                    var intensity= 1 - (this.ambient/2-.05)/.25;
-
-                    // how white do you want the stars to be ??
-                    var c= Math.floor( 192*intensity );
-                    var strc= 'rgb('+c+','+c+','+c+')';
-                    ctx.strokeStyle=strc;
-
-                    // first num_fireflyes coordinates are fireflyes themshelves.
-                    for( j=this.num_fireflyes*2; j<this.stars.length; j+=2 )	{
-                        var inc=1;
-                        if ( j%3==0 ) {
-                            inc=1.5;
-                        } else if ( j%11==0 ) {
-                            inc=2.5;
-                        }
-                        this.stars[j]= (this.stars[j]+.1*inc)%this.width;
-
-                        var y= this.stars[j+1];
-                        ctx.strokeRect(this.stars[j],this.stars[j+1],1,1);
-
-                    }
-                }
-
-                ctx.globalAlpha= 1;
-            }
-
-			// draw fireflyes
-
-	    	for( i=0; i<this.num_fireflyes*2; i+=2) {
-                ctx.fillStyle= this.fireflyColor[i%3];
-		    	var angle= Math.PI*2*Math.sin(time*3E-4) + i*Math.PI/50;
-		    	var radius= this.firefly_radius*Math.cos(time*3E-4);
-                var fy= this.height - this.height*.3 +
-		    			.5*this.stars[i+1] +
-		    			20*Math.sin(time*3E-4) +	// move vertically with time
-		    			radius*Math.sin(angle);
-
-                if ( fy<director.height ) {
-                    ctx.beginPath();
-                    ctx.arc(
-                            this.width/2 +
-                            .5*this.stars[i] +
-                            150*Math.cos(time*3E-4) +	// move horizontally with time
-                            (radius+20*Math.cos((i%5)*Math.PI/3600))*Math.cos(angle),
-
-                            fy,
-
-                            2,
-                            0,
-                            Math.PI*2,
-                            false );
-                    ctx.fill();
-                }
-	    	}
-
-			for( i=0; i<this.grass.length; i++ ) {
-				this.grass[i].paint(ctx,time,this.ambient);
-			}
-
-
-            if ( this.backgroundEnabled ) {
-                // lerp.
-                if ( time>this.nextLerpTime ) {
-                    this.lerpindex= Math.floor((time-this.nextLerpTime)/this.nextLerpTime);
-                    if ( (time-this.nextLerpTime)%this.nextLerpTime<this.lerpTime ) {
-                        this.lerp( ctx, (time-this.nextLerpTime)%this.nextLerpTime, this.lerpTime );
-                    }
-                }
-            }
 		},
 
         gradient:       null,
@@ -504,126 +240,6 @@
 })();
 
 (function() {
-    HN.Ovni= function(director, scene, ovnitrail, id ) {
-
-        HN.Ovni.superclass.constructor.call(this);
-
-        var ovniImage= new CAAT.SpriteImage().initialize( director.getImage('ovni'), 1, 2 );
-        this.setBackgroundImage(ovniImage.getRef().setAnimationImageIndex([(Math.random()*2)>>0]));
-        this.enableEvents(false);
-        this.setId(id);
-
-        setupBehavior(director, scene, ovnitrail, this);
-
-        return this;
-    };
-
-    HN.Ovni.prototype= {
-        animationName:  null,
-        __index:        0,
-
-        nextAnimationName : function() {
-            this.animationName= this.getId()+this.__index++;
-            return this.animationName;
-        },
-
-        getAnimationName : function() {
-            return this.animationName;
-        }
-    }
-
-    function setupBehavior(director, scene, ovnitrail, actor) {
-
-        var smokeImage;
-        smokeImage= new CAAT.SpriteImage().initialize(director.getImage('smoke'), 32,1 );
-
-        var TT=1000;
-        if ( director.glEnabled ) {
-            TT=6000;
-        }
-
-
-        var path= new CAAT.Path().setCubic(
-            Math.random() * director.width,
-            Math.random() * director.height,
-            Math.random() * director.width,
-            Math.random() * director.height,
-            Math.random() * director.width,
-            Math.random() * director.height,
-            Math.random() * director.width,
-            Math.random() * director.height);
-
-        var pb= new CAAT.PathBehavior().
-            setPath( path ).
-            setFrameTime( scene.time, 3000 + Math.random() * 3000 ).
-            addListener( {
-                prevTime : -1,
-                smokeTime: TT,
-                nextSmokeTime: 100,
-
-                behaviorExpired : function(behaviour, time) {
-                    var endCoord = behaviour.path.endCurvePosition();
-                    behaviour.setPath(
-                        new CAAT.Path().setCubic(
-                            endCoord.x,
-                            endCoord.y,
-                            Math.random() * director.width,
-                            Math.random() * director.height,
-                            Math.random() * director.width,
-                            Math.random() * director.height,
-                            Math.random() * director.width,
-                            Math.random() * director.height));
-                    behaviour.setFrameTime(scene.time, 3000 + Math.random() * 3000);
-                },
-
-                behaviorApplied : function(behavior, time, normalizedTime, actor, value) {
-                    if (-1 == this.prevTime || time - this.prevTime >= this.nextSmokeTime) {
-                        //var img= director.getImage('smoke');
-                        var img = smokeImage;
-                        var offset0 = Math.random() * 10 * (Math.random() < .5 ? 1 : -1);
-                        var offset1 = Math.random() * 10 * (Math.random() < .5 ? 1 : -1);
-                        var humo =
-                            new CAAT.Actor().
-                                setBackgroundImage(smokeImage.getRef().setAnimationImageIndex([0])).
-                                setLocation(
-                                    offset0 + actor.x + actor.width / 2 - img.singleWidth / 2,
-                                    offset1 + actor.y + actor.height / 2 - img.singleHeight / 2).
-                                setDiscardable(true).
-                                enableEvents(false).
-                                setFrameTime(time, this.smokeTime).
-                                addBehavior(
-                                    new CAAT.ScaleBehavior().
-                                        setFrameTime(time, this.smokeTime).
-                                        setValues(.5, 1.5, .5, 1.5));
-                                ;
-
-                        humo.addBehavior(
-                            new CAAT.GenericBehavior().
-                                setFrameTime(time, this.smokeTime).
-                                setValues(1, 0, null, null, function(value, target, actor) {
-                                    var v= 31 - ((value * 31) >> 0);
-                                    if ( v!==actor.backgroundImage.animationImageIndex[0] ) {
-                                        actor.setAnimationImageIndex([v]);
-                                    }
-                                })
-                        );
-
-                        ovnitrail.addChild(humo);
-
-                        this.prevTime = time;
-                    }
-
-                }
-            });
-
-        actor.addBehavior( pb );
-    }
-
-    extend( HN.Ovni, CAAT.Actor );
-
-})();
-
-(function() {
 
     HN.GardenScene= function() {
         if ( CAAT.browser!=='iOS' ) {
@@ -723,10 +339,10 @@
 
             var me= this;
 
+ var sb = new CAAT.ScaleBehavior().setValues( 1,5, 1,5 );
+ 
             var _howto= new CAAT.Actor().
-                setBackgroundImage(director.getImage('howto'), false ).
-                setImageTransformation( CAAT.SpriteImage.prototype.TR_FIXED_TO_SIZE).
-                setSize( HN.director.width, HN.director.height).
+                setBackgroundImage(new CAAT.SpriteImage().initialize( director.getImage('howto'),1,1 ) ).
                 setOutOfFrameTime().
                 setAlpha(.9);
 
@@ -769,66 +385,10 @@
             };
         },
 
-        createInfoButton : function( info_howto_ci ) {
-
-            var director= this.director;
-
-            var ihw= info_howto_ci.singleWidth;
-            var ihh= info_howto_ci.singleHeight;
-
-            var me= this;
-
-            // cartel entrante.
-            var _info= new CAAT.Actor().
-                setBackgroundImage( director.getImage('info'), false ).
-                setSize( HN.director.width, HN.director.height).
-                setImageTransformation( CAAT.SpriteImage.prototype.TR_FIXED_TO_SIZE).
-                setOutOfFrameTime().
-                setAlpha(.9);
-
-            var pbOut= new CAAT.PathBehavior().
-                setValues( new CAAT.Path().setLinear( _info.x,0,-700,0 ) ).
-                setInterpolator(new CAAT.Interpolator().createBounceOutInterpolator(false) ).
-                addListener( {
-                    behaviorExpired : function(behavior, time, actor) {
-                        _info.setOutOfFrameTime();
-                    }
-                });
-
-            var pbIn= new CAAT.PathBehavior().
-                setFrameTime( me.directorScene.time, 1000 ).
-                setValues( new CAAT.Path().setLinear( -700,0,0,0 ) ).
-                setInterpolator( new CAAT.Interpolator().createBounceOutInterpolator(false) );
-
-
-            _info.mouseClick= function( e ) {
-                _info.emptyBehaviorList().
-                    setFrameTime( me.directorScene.time, Number.MAX_VALUE ).
-                    addBehavior(pbOut.setFrameTime( me.directorScene.time, 1000 ));
-            };
-
-            // boton info
-            var info= new CAAT.Actor().
-                setAsButton(info_howto_ci.getRef(), 0,1,2,0,
-                    function(button) {
-
-                        director.audioPlay('11');
-                        _info.emptyBehaviorList().
-                            setFrameTime( me.directorScene.time, Number.MAX_VALUE ).
-                            addBehavior( pbIn.setFrameTime( me.directorScene.time, 1000 ) );
-
-                    }).
-                setBounds( 10, this.director.height-10-ihh, ihw, ihh );
-
-            return {
-                info:info,
-                infod:_info
-            };
-        },
-
         /**
          * Creates the main game Scene.
          * @param director a CAAT.Director instance.
+         * @param gardenSize 
          */
         create : function(director, gardenSize) {
 
@@ -848,32 +408,15 @@
 
             var imgb= director.getImage('background-2');
 
-            /*
-             * Para ver toda la textura de pagina
-            var ciimgb= new CAAT.SpriteImage().initialize( imgb,1,1 );
-            ciimgb.xyCache[0][0]= 0;
-            ciimgb.xyCache[0][1]= 0;
-            ciimgb.xyCache[0][2]= 1;
-            ciimgb.xyCache[0][3]= 1;
-            */
-
             this.directorScene.addChild(
                 new CAAT.Actor().
                         setBounds(0,0,dw,dh).
-                        setBackgroundImage(imgb,false).
-                        setImageTransformation( CAAT.SpriteImage.prototype.TR_FIXED_TO_SIZE )
+                        setBackgroundImage(imgb)
             );
+
 
             ///////////// some clouds
             this.createClouds();
-
-            ///////////// some ovnis
-            var ovnitrail= new CAAT.ActorContainer().create().setBounds(0,0,dw,dh);
-            this.directorScene.addChild(ovnitrail);
-
-            for (var i = 0; i < 2; i++) {
-                this.directorScene.addChild( new HN.Ovni( director, this.directorScene, ovnitrail, 'ovni'+i ) );
-            }
 
             ////////////// garden
             if ( gardenSize>0 ) {
@@ -926,49 +469,29 @@
                 logo.
                     setBackgroundImage(logoi, false).
                     setSize( logoi.width*.8, logoi.height*.8 ).
-                    setImageTransformation( CAAT.SpriteImage.prototype.TR_FIXED_TO_SIZE).
-                    setLocation( (dw - logoi.width *.8)/2, -10 );
+                    setImageTransformation( CAAT.SpriteImage.prototype.TR_FIXED_TO_SIZE );
             }
 
             this.directorScene.addChild(logo);
 
-            var madeWith= new CAAT.Actor();
-            var madeWithCI= new CAAT.SpriteImage().initialize(director.getImage('madewith'),1,3);
-            if ( CAAT.browser!=='iOS' ) {
-                    madeWith.setAsButton( madeWithCI, 0,1,2,0,
-                        function(button) {
-                            window.open('http://labs.hyperandroid.com/static/caat', 'Hyperandroid');
-
-                        });
-            } else {
-                madeWith.setBackgroundImage(madeWithCI, true);
-
-            }
-            madeWith.setLocation( dw-( director.width>director.height ? 100 : madeWithCI.singleWidth), 0 );
-            this.directorScene.addChild(madeWith);
-
 
             ///////// info & howto
             var info_howto_ci=  new CAAT.SpriteImage().initialize( director.getImage('info_howto'), 2, 3 );
-            var info=          this.createInfoButton(info_howto_ci);
             var howto=           this.createHowtoButton(info_howto_ci);
 
             this.directorScene.addChild(howto.howto);
-            this.directorScene.addChild(info.info);
             this.directorScene.addChild(howto.howtod);
-            this.directorScene.addChild(info.infod);
 
             if ( director.width<director.height ) {
                 CAAT.modules.LayoutUtils.row(
                     this.directorScene,
-                    [info.info,howto.howto],
+                    [howto.howto],
                     {
                         padding_left:   195,
                         padding_right:  195,
                         top:            director.height/2+100
                     });
             }
-
             return this;
         },
         soundControls : function(director) {
@@ -1048,7 +571,6 @@
             }
         },
         startGame : function(director,level,gameMode) {
-            //director.switchToNextScene(1000,false,true);
             this.gameScene.setDifficulty(level);
 
             this.gameScene.prepareSceneIn(gameMode);
